@@ -1,0 +1,93 @@
+package attachments_test
+
+import (
+	"os"
+	"testing"
+
+	"github.com/keep94/attachments"
+	"github.com/keep94/toolbox/kdf"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+var (
+	kNotFoundId = "123456789A"
+)
+
+func TestIdToPath(t *testing.T) {
+	assert.Equal(t, "1/35/3567", attachments.IdToPath("3567", 1))
+}
+
+func TestEncFileSystem_NoEncryption(t *testing.T) {
+	fakeFS := make(attachments.FakeFS)
+	fileSystem := &attachments.AESFS{FileSystem: fakeFS}
+	helloId, err := fileSystem.Write(([]byte)("Hello World!"))
+	require.NoError(t, err)
+	assert.Len(t, helloId, 64)
+	helloId2, err := fileSystem.Write(([]byte)("Hello World!"))
+	require.NoError(t, err)
+
+	assert.Equal(t, helloId, helloId2)
+	assert.Len(t, fakeFS, 1)
+
+	goodbyeId, err := fileSystem.Write(([]byte)("Goodbye World!"))
+	require.NoError(t, err)
+	assert.NotEqual(t, helloId, goodbyeId)
+
+	contents, err := attachments.ReadFile(fileSystem, helloId)
+	require.NoError(t, err)
+	assert.Equal(t, "Hello World!", string(contents))
+
+	contents, err = attachments.ReadFile(fileSystem, goodbyeId)
+	require.NoError(t, err)
+	assert.Equal(t, "Goodbye World!", string(contents))
+
+	_, err = attachments.ReadFile(fileSystem, kNotFoundId)
+	assert.Equal(t, os.ErrNotExist, err)
+
+	// Assert contents not encrypted
+	contents = fakeFS[attachments.IdToPath(helloId, 0)]
+	assert.Equal(t, "Hello World!", string(contents))
+}
+
+func TestEncFileSystem_Encryption(t *testing.T) {
+	key1 := kdf.Random(32)
+	key2 := kdf.Random(32)
+
+	fakeFS := make(attachments.FakeFS)
+	fileSystem1 := &attachments.AESFS{
+		FileSystem: fakeFS, Key: key1, OwnerId: 1}
+	fileSystem2 := &attachments.AESFS{
+		FileSystem: fakeFS, Key: key2, OwnerId: 2}
+
+	helloId, err := fileSystem1.Write(([]byte)("Hello World!"))
+	require.NoError(t, err)
+	assert.Len(t, helloId, 64)
+
+	contents, err := attachments.ReadFile(fileSystem1, helloId)
+	require.NoError(t, err)
+	assert.Equal(t, "Hello World!", string(contents))
+
+	// Verify that contents is actually encrypted in underlying file system
+	encContents := fakeFS[attachments.IdToPath(helloId, 1)]
+	assert.NotEqual(t, encContents, contents)
+
+	// Assert hello world checksum is the same for both users and that we
+	// write hello world again encrypted for second user
+	oldFileCount := len(fakeFS)
+	helloId2, err := fileSystem2.Write(([]byte)("Hello World!"))
+	require.NoError(t, err)
+	assert.Equal(t, helloId, helloId2)
+	assert.Len(t, fakeFS, oldFileCount+1)
+
+	// Assert that using the wrong encryption key to read does not work.
+	fileSystem1.Key = key2
+	contents, err = attachments.ReadFile(fileSystem1, helloId)
+	require.NoError(t, err)
+	assert.NotEqual(t, "Hello World!", string(contents))
+
+	// Assert that we get ErrNotExist
+	fileSystem1.Key = key1
+	_, err = attachments.ReadFile(fileSystem1, kNotFoundId)
+	assert.Equal(t, os.ErrNotExist, err)
+}
