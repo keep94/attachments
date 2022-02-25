@@ -61,7 +61,9 @@ type Store interface {
 	EntryById(t db.Transaction, id, ownerId int64, entry *Entry) error
 }
 
-// NewFakeStore returns an in memory implementation of Store.
+// NewFakeStore returns an in memory implementation of Store. Multiple
+// goroutines can concurrently read the returned Store as long as no
+// goroutines are writing to the returned store at the same time.
 func NewFakeStore() Store {
 	var store fakeStore
 	return &store
@@ -79,7 +81,7 @@ func ReadOnlyFS(fileSystem FS) FS {
 	return &readOnlyFS{FS: fileSystem}
 }
 
-// ImmutableFS represents an immutable file system.
+// ImmutableFS represents an immutable file system featuring encryption.
 type ImmutableFS struct {
 
 	// Store is the database store for the file entries
@@ -103,7 +105,7 @@ func NewImmutableFS(
 	}
 }
 
-// Open opens the named file. name is of the form entryId/entryName e.g
+// Open opens the named file. name is of the form EntryId/EntryName e.g
 // "12345/document.pdf"
 func (f *ImmutableFS) Open(name string) (fs.File, error) {
 	pathErr := &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}

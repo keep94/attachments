@@ -1,4 +1,5 @@
-// Package for_sqlite provides a sqlite implementation of the attachments db
+// Package for_sqlite provides a sqlite implementation of the attachments
+// database.
 package for_sqlite
 
 import (
@@ -14,17 +15,17 @@ const (
 	kSQLAddEntry  = "insert into attachments (name, size, ts, owner, checksum) values (?, ?, ?, ?, ?)"
 )
 
+// Store is a sqlite implementation of attachments.Store
 type Store struct {
 	db sqlite_db.Doer
 }
 
-// New creates a sqlite implementation of the attachments datastore.
+// New creates a new Store instance.
 func New(db *sqlite_db.Db) Store {
 	return Store{db}
 }
 
-// ConnNew creates a sqlite implementation of the attachments datastore from
-// a sqlite connection instance.
+// ConnNew creates a new Store instance from a sqlite connection.
 func ConnNew(conn *sqlite.Conn) Store {
 	return Store{sqlite_db.NewSqliteDoer(conn)}
 }

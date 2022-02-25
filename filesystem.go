@@ -8,43 +8,16 @@ import (
 	"path"
 )
 
-// ROFS is a very simple read only file system.
-type ROFS interface {
-
-	// Open opens a file
-	Open(name string) (io.ReadCloser, error)
-}
-
 // FS is a very simple file system.
 type FS interface {
-	ROFS
+	// Open opens a file
+	Open(name string) (io.ReadCloser, error)
 
 	// Write writes a file.
 	Write(name string) (io.WriteCloser, error)
 
 	// Exists returns true if file with given path exists.
 	Exists(name string) bool
-}
-
-// ReadFile reads the contents of a file.
-func ReadFile(fileSystem ROFS, name string) ([]byte, error) {
-	reader, err := fileSystem.Open(name)
-	if err != nil {
-		return nil, err
-	}
-	defer reader.Close()
-	return io.ReadAll(reader)
-}
-
-// WriteFile writes contents to a file.
-func WriteFile(fileSystem FS, name string, contents []byte) error {
-	writer, err := fileSystem.Write(name)
-	if err != nil {
-		return err
-	}
-	defer writer.Close()
-	_, err = writer.Write(contents)
-	return err
 }
 
 // NewFS returns a file system backed by disk rooted at path root.
@@ -120,4 +93,29 @@ func (r *realFS) Exists(name string) bool {
 
 func (r *realFS) fullPath(name string) string {
 	return path.Join(r.root, name)
+}
+
+type rofs interface {
+
+	// Open opens a file
+	Open(name string) (io.ReadCloser, error)
+}
+
+func readFile(fileSystem rofs, name string) ([]byte, error) {
+	reader, err := fileSystem.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	return io.ReadAll(reader)
+}
+
+func writeFile(fileSystem FS, name string, contents []byte) error {
+	writer, err := fileSystem.Write(name)
+	if err != nil {
+		return err
+	}
+	defer writer.Close()
+	_, err = writer.Write(contents)
+	return err
 }

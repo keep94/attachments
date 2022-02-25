@@ -1,4 +1,4 @@
-package attachments_test
+package attachments
 
 import (
 	"errors"
@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/keep94/attachments"
 	"github.com/keep94/toolbox/db"
 	"github.com/keep94/toolbox/kdf"
 	"github.com/stretchr/testify/assert"
@@ -14,14 +13,14 @@ import (
 )
 
 var (
-	errDatabase = errors.New("attachments_test: database error")
+	errDatabase = errors.New("attachments: database error")
 )
 
 func TestImmutableFS(t *testing.T) {
-	fakeFs := make(attachments.FakeFS)
-	store := attachments.NewFakeStore()
-	immutableFs1 := attachments.NewImmutableFS(fakeFs, store, 1, nil)
-	immutableFs2 := attachments.NewImmutableFS(fakeFs, store, 2, kdf.Random(32))
+	fakeFs := make(FakeFS)
+	store := NewFakeStore()
+	immutableFs1 := NewImmutableFS(fakeFs, store, 1, nil)
+	immutableFs2 := NewImmutableFS(fakeFs, store, 2, kdf.Random(32))
 	firstId, err := immutableFs1.Write(
 		"hello.txt", ([]byte)("Hello World!"))
 	require.NoError(t, err)
@@ -112,7 +111,7 @@ func TestImmutableFS(t *testing.T) {
 	files, err := immutableFs1.List(nil, map[int64]bool{1: true})
 	require.NoError(t, err)
 	require.Len(t, files, 1)
-	rawPath := attachments.IdToPath(files[0].Checksum, files[0].OwnerId)
+	rawPath := idToPath(files[0].Checksum, files[0].OwnerId)
 	assert.Equal(t, contents, fakeFs[rawPath])
 
 	contents, err = fs.ReadFile(immutableFs2, "4/goodbye.txt")
@@ -123,7 +122,7 @@ func TestImmutableFS(t *testing.T) {
 	files, err = immutableFs2.List(nil, map[int64]bool{4: true})
 	require.NoError(t, err)
 	require.Len(t, files, 1)
-	rawPath = attachments.IdToPath(files[0].Checksum, files[0].OwnerId)
+	rawPath = idToPath(files[0].Checksum, files[0].OwnerId)
 	assert.NotEqual(t, contents, fakeFs[rawPath])
 
 	file, err := immutableFs2.Open("3/hello2.txt")
@@ -142,17 +141,15 @@ func TestImmutableFS(t *testing.T) {
 }
 
 func TestImmutableFS_WriteError(t *testing.T) {
-	fakeFs := attachments.ReadOnlyFS(make(attachments.FakeFS))
-	immutableFs := attachments.NewImmutableFS(
-		fakeFs, attachments.NewFakeStore(), 1, nil)
+	fakeFs := ReadOnlyFS(make(FakeFS))
+	immutableFs := NewImmutableFS(fakeFs, NewFakeStore(), 1, nil)
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	assert.Error(t, err)
 }
 
 func TestImmutableFS_ReadError(t *testing.T) {
-	fakeFs := make(attachments.FakeFS)
-	immutableFs := attachments.NewImmutableFS(
-		fakeFs, attachments.NewFakeStore(), 1, nil)
+	fakeFs := make(FakeFS)
+	immutableFs := NewImmutableFS(fakeFs, NewFakeStore(), 1, nil)
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	require.NoError(t, err)
 
@@ -170,20 +167,18 @@ func TestImmutableFS_ReadError(t *testing.T) {
 }
 
 func TestImmutableFS_DBErrorOnWrite(t *testing.T) {
-	store := attachments.ReadOnlyStore(attachments.NewFakeStore())
-	immutableFs := attachments.NewImmutableFS(
-		make(attachments.FakeFS), store, 1, nil)
+	store := ReadOnlyStore(NewFakeStore())
+	immutableFs := NewImmutableFS(make(FakeFS), store, 1, nil)
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	assert.Error(t, err)
 }
 
 func TestImmutableFS_DBErrorOnRead(t *testing.T) {
-	immutableFs := attachments.NewImmutableFS(
-		make(attachments.FakeFS), attachments.NewFakeStore(), 1, nil)
+	immutableFs := NewImmutableFS(make(FakeFS), NewFakeStore(), 1, nil)
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	require.NoError(t, err)
 
-	immutableFs.Store = attachments.NewFakeStore()
+	immutableFs.Store = NewFakeStore()
 
 	// Should get an error reading
 	_, err = immutableFs.Open("1/hello.txt")
@@ -194,38 +189,37 @@ func TestImmutableFS_DBErrorOnRead(t *testing.T) {
 }
 
 func TestReadOnlyStore(t *testing.T) {
-	store := attachments.NewFakeStore()
-	var entry attachments.Entry
+	store := NewFakeStore()
+	var entry Entry
 	require.NoError(t, store.AddEntry(nil, &entry))
-	roStore := attachments.ReadOnlyStore(store)
-	var fetchedEntry attachments.Entry
+	roStore := ReadOnlyStore(store)
+	var fetchedEntry Entry
 	require.NoError(t, roStore.EntryById(nil, 1, 0, &fetchedEntry))
 	assert.Equal(t, entry, fetchedEntry)
-	assert.Equal(t, attachments.ErrReadOnly, roStore.AddEntry(nil, &entry))
+	assert.Equal(t, ErrReadOnly, roStore.AddEntry(nil, &entry))
 }
 
 func TestReadOnlyFS(t *testing.T) {
-	fileSystem := attachments.FakeFS{"hello.txt": ([]byte)("Hello World!")}
-	roFileSystem := attachments.ReadOnlyFS(fileSystem)
+	fileSystem := FakeFS{"hello.txt": ([]byte)("Hello World!")}
+	roFileSystem := ReadOnlyFS(fileSystem)
 	assert.True(t, roFileSystem.Exists("hello.txt"))
-	contents, err := attachments.ReadFile(roFileSystem, "hello.txt")
+	contents, err := readFile(roFileSystem, "hello.txt")
 	require.NoError(t, err)
 	assert.Equal(t, "Hello World!", string(contents))
 	assert.Equal(
 		t,
-		attachments.ErrReadOnly,
-		attachments.WriteFile(
-			roFileSystem, "goodbye.txt", ([]byte)("Goodbye World!")))
+		ErrReadOnly,
+		writeFile(roFileSystem, "goodbye.txt", ([]byte)("Goodbye World!")))
 }
 
 type errorStore struct {
 }
 
 func (errorStore) EntryById(
-	t db.Transaction, id, ownerId int64, entry *attachments.Entry) error {
+	t db.Transaction, id, ownerId int64, entry *Entry) error {
 	return errDatabase
 }
 
-func (errorStore) AddEntry(t db.Transaction, entry *attachments.Entry) error {
+func (errorStore) AddEntry(t db.Transaction, entry *Entry) error {
 	return errDatabase
 }

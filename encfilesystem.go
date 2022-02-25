@@ -11,14 +11,6 @@ import (
 	"io"
 )
 
-// IdToPath converts a 64 digit hexadecimal ID and ownerId to a path.
-func IdToPath(id string, ownerId int64) string {
-	if len(id) < 2 {
-		panic("ids should be 64 hexadecimal digits")
-	}
-	return fmt.Sprintf("%d/%s/%s", ownerId, id[:2], id)
-}
-
 // AESFS is an encrypted file system storing immutable data
 type AESFS struct {
 
@@ -33,18 +25,17 @@ type AESFS struct {
 	OwnerId int64
 }
 
-// Write writes data to the underlying file system and returns a 64 digit
-// hexadecimal ID to that data. The ID is actually the SHA-256 checksum of
-// that data.
+// Write writes data to the underlying file system and returns the 64 digit
+// hexadecimal SHA-256 checksum of that data.
 func (a *AESFS) Write(contents []byte) (string, error) {
 	binaryId := checksum(contents)
 	id := hex.EncodeToString(binaryId)
-	name := IdToPath(id, a.OwnerId)
+	name := idToPath(id, a.OwnerId)
 	if a.FileSystem.Exists(name) {
 		return id, nil
 	}
 	if a.Key == nil {
-		if err := WriteFile(a.FileSystem, name, contents); err != nil {
+		if err := writeFile(a.FileSystem, name, contents); err != nil {
 			return "", err
 		}
 		return id, nil
@@ -55,14 +46,14 @@ func (a *AESFS) Write(contents []byte) (string, error) {
 	return id, nil
 }
 
-// Open returns a reader to retrieve data. id is the 64 digit hexadecimal
-// ID to the data.
-func (a *AESFS) Open(id string) (io.ReadCloser, error) {
-	name := IdToPath(id, a.OwnerId)
+// Open returns a reader to retrieve data. checksum is the 64 digit hexadecimal
+// checksum of the data that Write returned.
+func (a *AESFS) Open(checksum string) (io.ReadCloser, error) {
+	name := idToPath(checksum, a.OwnerId)
 	if a.Key == nil {
 		return a.FileSystem.Open(name)
 	}
-	binaryId, err := hex.DecodeString(id)
+	binaryId, err := hex.DecodeString(checksum)
 	if err != nil {
 		return nil, err
 	}
@@ -117,4 +108,12 @@ func iv(checksum []byte, owner int64) []byte {
 	hash.Write(checksum)
 	binary.Write(hash, binary.LittleEndian, owner)
 	return hash.Sum(nil)[:aes.BlockSize]
+}
+
+// idToPath converts a 64 digit hexadecimal ID and ownerId to a path.
+func idToPath(id string, ownerId int64) string {
+	if len(id) < 2 {
+		panic("ids should be 64 hexadecimal digits")
+	}
+	return fmt.Sprintf("%d/%s/%s", ownerId, id[:2], id)
 }
