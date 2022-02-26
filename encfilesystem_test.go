@@ -19,7 +19,7 @@ func TestIdToPath(t *testing.T) {
 
 func TestEncFileSystem_NoEncryption(t *testing.T) {
 	fakeFS := make(FakeFS)
-	fileSystem := &AESFS{FileSystem: fakeFS}
+	fileSystem := &aesFS{FileSystem: fakeFS}
 	helloId, err := fileSystem.Write(([]byte)("Hello World!"))
 	require.NoError(t, err)
 	assert.Len(t, helloId, 64)
@@ -54,8 +54,8 @@ func TestEncFileSystem_Encryption(t *testing.T) {
 	key2 := kdf.Random(32)
 
 	fakeFS := make(FakeFS)
-	fileSystem1 := &AESFS{FileSystem: fakeFS, Key: key1, OwnerId: 1}
-	fileSystem2 := &AESFS{FileSystem: fakeFS, Key: key2, OwnerId: 2}
+	fileSystem1 := &aesFS{FileSystem: fakeFS, Key: key1, OwnerId: 1}
+	fileSystem2 := &aesFS{FileSystem: fakeFS, Key: key2, OwnerId: 2}
 
 	helloId, err := fileSystem1.Write(([]byte)("Hello World!"))
 	require.NoError(t, err)

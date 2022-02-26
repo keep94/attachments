@@ -47,12 +47,14 @@ func TestImmutableFS(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(5), fifthId)
 
-	// The two "Hello World!" files have the same content which is why we
-	// expect 4, not 5, files on the underlying file system.
+	// The two "Hello World!" files written to immutableFs1 have the same
+	// content which is why we expect 4, not 5, files on the underlying file
+	// system.
 	assert.Len(t, fakeFs, 4)
 
 	entries, err := immutableFs2.List(
-		nil, map[int64]bool{1: true, 2: true, 3: true, 4: true, 5: true})
+		nil,
+		map[int64]bool{1: true, 2: true, 3: true, 4: true, 5: true, 6: true})
 	require.NoError(t, err)
 	require.Len(t, entries, 3)
 	assert.Equal(t, "3/hello2.txt", entries[0].Path())
@@ -60,17 +62,18 @@ func TestImmutableFS(t *testing.T) {
 	assert.Equal(t, "5/solong.txt", entries[2].Path())
 
 	entries, err = immutableFs2.List(
-		nil, map[int64]bool{1: true, 2: true, 3: true, 4: true, 5: false})
+		nil,
+		map[int64]bool{1: true, 2: true, 3: true, 4: true, 5: false, 6: true})
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
 	assert.Equal(t, "3/hello2.txt", entries[0].Path())
 	assert.Equal(t, "4/goodbye.txt", entries[1].Path())
 
 	// Test that List correctly handles database errors.
-	immutableFs2.Store = errorStore{}
+	immutableFs2.store = errorStore{}
 	_, err = immutableFs2.List(nil, map[int64]bool{1: true})
 	assert.Error(t, err)
-	immutableFs2.Store = store
+	immutableFs2.store = store
 
 	// Invalid path
 	_, err = immutableFs1.Open("/x")
@@ -178,7 +181,7 @@ func TestImmutableFS_DBErrorOnRead(t *testing.T) {
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	require.NoError(t, err)
 
-	immutableFs.Store = NewFakeStore()
+	immutableFs.store = NewFakeStore()
 
 	// Should get an error reading
 	_, err = immutableFs.Open("1/hello.txt")
@@ -186,6 +189,19 @@ func TestImmutableFS_DBErrorOnRead(t *testing.T) {
 		t,
 		&fs.PathError{Op: "open", Path: "1/hello.txt", Err: fs.ErrNotExist},
 		err)
+}
+
+func TestImmutableFS_DefensiveCopy(t *testing.T) {
+	origKey := kdf.Random(32)
+	key := make([]byte, len(origKey))
+	copy(key, origKey)
+	fs := make(FakeFS)
+	store := NewFakeStore()
+	fs1 := NewImmutableFS(fs, store, 1, nil)
+	fs2 := NewImmutableFS(fs, store, 2, key)
+	key[0] ^= 0xFF
+	assert.Nil(t, fs1.fileSystem.Key)
+	assert.Equal(t, origKey, fs2.fileSystem.Key)
 }
 
 func TestReadOnlyStore(t *testing.T) {

@@ -85,22 +85,22 @@ func ReadOnlyFS(fileSystem FS) FS {
 type ImmutableFS struct {
 
 	// Store is the database store for the file entries
-	Store Store
+	store Store
 
-	// FileSystem stores the contents of the files by checksum
-	FileSystem *AESFS
+	// fileSystem stores the contents of the files by checksum
+	fileSystem *aesFS
 }
 
 // NewImmutableFS creates a new ImmutableFS instance. If key is nil, no
-// encryption is done. No defensive copy is made of key.
+// encryption is done.
 func NewImmutableFS(
 	fileSystem FS, store Store, ownerId int64, key []byte) *ImmutableFS {
 	return &ImmutableFS{
-		Store: store,
-		FileSystem: &AESFS{
+		store: store,
+		fileSystem: &aesFS{
 			FileSystem: fileSystem,
 			OwnerId:    ownerId,
-			Key:        key,
+			Key:        copyKey(key),
 		},
 	}
 }
@@ -114,14 +114,14 @@ func (f *ImmutableFS) Open(name string) (fs.File, error) {
 		return nil, pathErr
 	}
 	var entry Entry
-	err := f.Store.EntryById(nil, id, f.FileSystem.OwnerId, &entry)
+	err := f.store.EntryById(nil, id, f.fileSystem.OwnerId, &entry)
 	if err != nil {
 		return nil, pathErr
 	}
 	if baseName != entry.Name {
 		return nil, pathErr
 	}
-	readCloser, err := f.FileSystem.Open(entry.Checksum)
+	readCloser, err := f.fileSystem.Open(entry.Checksum)
 	if err != nil {
 		return nil, pathErr
 	}
@@ -131,7 +131,7 @@ func (f *ImmutableFS) Open(name string) (fs.File, error) {
 // Write writes a new file. name is the file name e.g "document.pdf" Write
 // returns the Id of the new file, e.g 12345.
 func (f *ImmutableFS) Write(name string, contents []byte) (int64, error) {
-	checksum, err := f.FileSystem.Write(contents)
+	checksum, err := f.fileSystem.Write(contents)
 	if err != nil {
 		return 0, err
 	}
@@ -139,10 +139,10 @@ func (f *ImmutableFS) Write(name string, contents []byte) (int64, error) {
 		Name:     name,
 		Size:     int64(len(contents)),
 		Ts:       time.Now().Unix(),
-		OwnerId:  f.FileSystem.OwnerId,
+		OwnerId:  f.fileSystem.OwnerId,
 		Checksum: checksum,
 	}
-	if err := f.Store.AddEntry(nil, &entry); err != nil {
+	if err := f.store.AddEntry(nil, &entry); err != nil {
 		return 0, err
 	}
 	return entry.Id, nil
@@ -159,7 +159,7 @@ func (f *ImmutableFS) List(
 			continue
 		}
 		var entry Entry
-		err := f.Store.EntryById(t, id, f.FileSystem.OwnerId, &entry)
+		err := f.store.EntryById(t, id, f.fileSystem.OwnerId, &entry)
 		if err == ErrNoSuchId {
 			continue
 		}
@@ -261,4 +261,13 @@ type readOnlyFS struct {
 
 func (r *readOnlyFS) Write(name string) (io.WriteCloser, error) {
 	return nil, ErrReadOnly
+}
+
+func copyKey(key []byte) []byte {
+	if key == nil {
+		return nil
+	}
+	result := make([]byte, len(key))
+	copy(result, key)
+	return result
 }

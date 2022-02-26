@@ -11,8 +11,8 @@ import (
 	"io"
 )
 
-// AESFS is an encrypted file system storing immutable data
-type AESFS struct {
+// aesFS is an encrypted file system storing immutable data
+type aesFS struct {
 
 	// The underlying file system
 	FileSystem FS
@@ -27,7 +27,7 @@ type AESFS struct {
 
 // Write writes data to the underlying file system and returns the 64 digit
 // hexadecimal SHA-256 checksum of that data.
-func (a *AESFS) Write(contents []byte) (string, error) {
+func (a *aesFS) Write(contents []byte) (string, error) {
 	binaryId := checksum(contents)
 	id := hex.EncodeToString(binaryId)
 	name := idToPath(id, a.OwnerId)
@@ -48,7 +48,7 @@ func (a *AESFS) Write(contents []byte) (string, error) {
 
 // Open returns a reader to retrieve data. checksum is the 64 digit hexadecimal
 // checksum of the data that Write returned.
-func (a *AESFS) Open(checksum string) (io.ReadCloser, error) {
+func (a *aesFS) Open(checksum string) (io.ReadCloser, error) {
 	name := idToPath(checksum, a.OwnerId)
 	if a.Key == nil {
 		return a.FileSystem.Open(name)
@@ -60,7 +60,7 @@ func (a *AESFS) Open(checksum string) (io.ReadCloser, error) {
 	return a.openEncrypted(name, binaryId)
 }
 
-func (a *AESFS) writeEncrypted(
+func (a *aesFS) writeEncrypted(
 	name string, binaryId, contents []byte) error {
 	writer, err := a.FileSystem.Write(name)
 	if err != nil {
@@ -77,7 +77,7 @@ func (a *AESFS) writeEncrypted(
 	return err
 }
 
-func (a *AESFS) openEncrypted(
+func (a *aesFS) openEncrypted(
 	name string, binaryId []byte) (io.ReadCloser, error) {
 	reader, err := a.FileSystem.Open(name)
 	if err != nil {
