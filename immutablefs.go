@@ -81,7 +81,8 @@ func ReadOnlyFS(fileSystem FS) FS {
 	return &readOnlyFS{FS: fileSystem}
 }
 
-// ImmutableFS represents an immutable file system featuring encryption.
+// ImmutableFS represents an immutable file system featuring AES-256
+// encryption.
 type ImmutableFS struct {
 
 	// Store is the database store for the file entries
