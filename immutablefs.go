@@ -81,6 +81,16 @@ func ReadOnlyFS(fileSystem FS) FS {
 	return &readOnlyFS{FS: fileSystem}
 }
 
+// Option represents an optional settings for ImmutableFS.
+type Option interface {
+	apply(fs *ImmutableFS)
+}
+
+// Key enables encryption with given encryption key.
+func Key(key []byte) Option {
+	return &keyOption{Key: copyKey(key)}
+}
+
 // ImmutableFS represents an immutable file system featuring AES-256
 // encryption.
 type ImmutableFS struct {
@@ -89,21 +99,23 @@ type ImmutableFS struct {
 	store Store
 
 	// fileSystem stores the contents of the files by checksum
-	fileSystem *aesFS
+	fileSystem aesFS
 }
 
-// NewImmutableFS creates a new ImmutableFS instance. If key is nil, no
-// encryption is done.
+// NewImmutableFS creates a new ImmutableFS instance.
 func NewImmutableFS(
-	fileSystem FS, store Store, ownerId int64, key []byte) *ImmutableFS {
-	return &ImmutableFS{
+	fileSystem FS, store Store, ownerId int64, options ...Option) *ImmutableFS {
+	result := &ImmutableFS{
 		store: store,
-		fileSystem: &aesFS{
+		fileSystem: aesFS{
 			FileSystem: fileSystem,
 			OwnerId:    ownerId,
-			Key:        copyKey(key),
 		},
 	}
+	for _, o := range options {
+		o.apply(result)
+	}
+	return result
 }
 
 // Open opens the named file. name is of the form EntryId/EntryName e.g
@@ -265,10 +277,15 @@ func (r *readOnlyFS) Write(name string) (io.WriteCloser, error) {
 }
 
 func copyKey(key []byte) []byte {
-	if key == nil {
-		return nil
-	}
 	result := make([]byte, len(key))
 	copy(result, key)
 	return result
+}
+
+type keyOption struct {
+	Key []byte
+}
+
+func (k *keyOption) apply(fs *ImmutableFS) {
+	fs.fileSystem.Key = k.Key
 }

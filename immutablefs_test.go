@@ -19,8 +19,8 @@ var (
 func TestImmutableFS(t *testing.T) {
 	fakeFs := make(FakeFS)
 	store := NewFakeStore()
-	immutableFs1 := NewImmutableFS(fakeFs, store, 1, nil)
-	immutableFs2 := NewImmutableFS(fakeFs, store, 2, kdf.Random(32))
+	immutableFs1 := NewImmutableFS(fakeFs, store, 1)
+	immutableFs2 := NewImmutableFS(fakeFs, store, 2, Key(kdf.Random(32)))
 	firstId, err := immutableFs1.Write(
 		"hello.txt", ([]byte)("Hello World!"))
 	require.NoError(t, err)
@@ -145,14 +145,14 @@ func TestImmutableFS(t *testing.T) {
 
 func TestImmutableFS_WriteError(t *testing.T) {
 	fakeFs := ReadOnlyFS(make(FakeFS))
-	immutableFs := NewImmutableFS(fakeFs, NewFakeStore(), 1, nil)
+	immutableFs := NewImmutableFS(fakeFs, NewFakeStore(), 1)
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	assert.Error(t, err)
 }
 
 func TestImmutableFS_ReadError(t *testing.T) {
 	fakeFs := make(FakeFS)
-	immutableFs := NewImmutableFS(fakeFs, NewFakeStore(), 1, nil)
+	immutableFs := NewImmutableFS(fakeFs, NewFakeStore(), 1)
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	require.NoError(t, err)
 
@@ -171,13 +171,13 @@ func TestImmutableFS_ReadError(t *testing.T) {
 
 func TestImmutableFS_DBErrorOnWrite(t *testing.T) {
 	store := ReadOnlyStore(NewFakeStore())
-	immutableFs := NewImmutableFS(make(FakeFS), store, 1, nil)
+	immutableFs := NewImmutableFS(make(FakeFS), store, 1)
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	assert.Error(t, err)
 }
 
 func TestImmutableFS_DBErrorOnRead(t *testing.T) {
-	immutableFs := NewImmutableFS(make(FakeFS), NewFakeStore(), 1, nil)
+	immutableFs := NewImmutableFS(make(FakeFS), NewFakeStore(), 1)
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	require.NoError(t, err)
 
@@ -192,14 +192,15 @@ func TestImmutableFS_DBErrorOnRead(t *testing.T) {
 }
 
 func TestImmutableFS_DefensiveCopy(t *testing.T) {
+	fs := make(FakeFS)
+	store := NewFakeStore()
+	fs1 := NewImmutableFS(fs, store, 1)
 	origKey := kdf.Random(32)
 	key := make([]byte, len(origKey))
 	copy(key, origKey)
-	fs := make(FakeFS)
-	store := NewFakeStore()
-	fs1 := NewImmutableFS(fs, store, 1, nil)
-	fs2 := NewImmutableFS(fs, store, 2, key)
+	option := Key(key)
 	key[0] ^= 0xFF
+	fs2 := NewImmutableFS(fs, store, 2, option)
 	assert.Nil(t, fs1.fileSystem.Key)
 	assert.Equal(t, origKey, fs2.fileSystem.Key)
 }
