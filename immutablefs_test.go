@@ -222,10 +222,8 @@ func TestReadOnlyFS(t *testing.T) {
 	contents, err := readFile(roFileSystem, "hello.txt")
 	require.NoError(t, err)
 	assert.Equal(t, "Hello World!", string(contents))
-	assert.Equal(
-		t,
-		ErrReadOnly,
-		writeFile(roFileSystem, "goodbye.txt", ([]byte)("Goodbye World!")))
+	_, err = roFileSystem.Write("goodbye.txt")
+	assert.Equal(t, ErrReadOnly, err)
 }
 
 type errorStore struct {

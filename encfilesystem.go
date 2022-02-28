@@ -34,13 +34,7 @@ func (a *aesFS) Write(contents []byte) (string, error) {
 	if a.FileSystem.Exists(name) {
 		return id, nil
 	}
-	if a.Key == nil {
-		if err := writeFile(a.FileSystem, name, contents); err != nil {
-			return "", err
-		}
-		return id, nil
-	}
-	if err := a.writeEncrypted(name, binaryId, contents); err != nil {
+	if err := a.write(name, binaryId, contents); err != nil {
 		return "", err
 	}
 	return id, nil
@@ -50,46 +44,66 @@ func (a *aesFS) Write(contents []byte) (string, error) {
 // checksum of the data that Write returned.
 func (a *aesFS) Open(checksum string) (io.ReadCloser, error) {
 	name := idToPath(checksum, a.OwnerId)
-	if a.Key == nil {
-		return a.FileSystem.Open(name)
+	var binaryId []byte
+	var block cipher.Block
+	var err error
+	if a.Key != nil {
+		binaryId, err = hex.DecodeString(checksum)
+		if err != nil {
+			return nil, err
+		}
+		block, err = aes.NewCipher(a.Key)
+		if err != nil {
+			return nil, err
+		}
 	}
-	binaryId, err := hex.DecodeString(checksum)
-	if err != nil {
-		return nil, err
-	}
-	return a.openEncrypted(name, binaryId)
-}
-
-func (a *aesFS) writeEncrypted(
-	name string, binaryId, contents []byte) error {
-	writer, err := a.FileSystem.Write(name)
-	if err != nil {
-		return err
-	}
-	block, err := aes.NewCipher(a.Key)
-	if err != nil {
-		return err
-	}
-	stream := cipher.NewCFBEncrypter(block, iv(binaryId, a.OwnerId))
-	streamWriter := cipher.StreamWriter{S: stream, W: writer}
-	defer streamWriter.Close()
-	_, err = io.Copy(streamWriter, bytes.NewReader(contents))
-	return err
-}
-
-func (a *aesFS) openEncrypted(
-	name string, binaryId []byte) (io.ReadCloser, error) {
 	reader, err := a.FileSystem.Open(name)
 	if err != nil {
 		return nil, err
 	}
-	block, err := aes.NewCipher(a.Key)
-	if err != nil {
-		return nil, err
+	if block != nil {
+		reader = a.addDecryption(reader, block, binaryId)
 	}
+	return reader, nil
+}
+
+func (a *aesFS) write(
+	name string, binaryId, contents []byte) error {
+	var block cipher.Block
+	var err error
+	if a.Key != nil {
+		block, err = aes.NewCipher(a.Key)
+		if err != nil {
+			return err
+		}
+	}
+	writer, err := a.FileSystem.Write(name)
+	if err != nil {
+		return err
+	}
+	if block != nil {
+		writer = a.addEncryption(writer, block, binaryId)
+	}
+	defer writer.Close()
+	_, err = io.Copy(writer, bytes.NewReader(contents))
+	return err
+}
+
+func (a *aesFS) addEncryption(
+	writer io.WriteCloser,
+	block cipher.Block,
+	binaryId []byte) io.WriteCloser {
+	stream := cipher.NewCFBEncrypter(block, iv(binaryId, a.OwnerId))
+	return cipher.StreamWriter{S: stream, W: writer}
+}
+
+func (a *aesFS) addDecryption(
+	reader io.ReadCloser,
+	block cipher.Block,
+	binaryId []byte) io.ReadCloser {
 	stream := cipher.NewCFBDecrypter(block, iv(binaryId, a.OwnerId))
 	streamReader := cipher.StreamReader{S: stream, R: reader}
-	return &readerCloser{Reader: streamReader, Closer: reader}, nil
+	return &readerCloser{Reader: streamReader, Closer: reader}
 }
 
 type readerCloser struct {

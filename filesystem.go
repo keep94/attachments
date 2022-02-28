@@ -109,13 +109,3 @@ func readFile(fileSystem rofs, name string) ([]byte, error) {
 	defer reader.Close()
 	return io.ReadAll(reader)
 }
-
-func writeFile(fileSystem FS, name string, contents []byte) error {
-	writer, err := fileSystem.Write(name)
-	if err != nil {
-		return err
-	}
-	defer writer.Close()
-	_, err = writer.Write(contents)
-	return err
-}
