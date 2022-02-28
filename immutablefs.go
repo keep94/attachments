@@ -99,6 +99,10 @@ type ImmutableFS struct {
 }
 
 // NewImmutableFS creates a new ImmutableFS instance.
+// fileSystem is where the contents of files are stored. store is where
+// file meta data are stored such as size and timestamp. ownerId indicates
+// the ownerId. Returned instance will store and retrieve files only for that
+// ownerId even though fileSystem and store stores files for all owners.
 func NewImmutableFS(
 	fileSystem FS, store Store, ownerId int64, options ...Option) *ImmutableFS {
 	result := &ImmutableFS{
