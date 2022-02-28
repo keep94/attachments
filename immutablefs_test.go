@@ -144,7 +144,7 @@ func TestImmutableFS(t *testing.T) {
 }
 
 func TestImmutableFS_WriteError(t *testing.T) {
-	fakeFs := ReadOnlyFS(make(FakeFS))
+	fakeFs := &readOnlyFS{FS: make(FakeFS)}
 	immutableFs := NewImmutableFS(fakeFs, NewFakeStore(), 1)
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	assert.Error(t, err)
@@ -170,7 +170,7 @@ func TestImmutableFS_ReadError(t *testing.T) {
 }
 
 func TestImmutableFS_DBErrorOnWrite(t *testing.T) {
-	store := ReadOnlyStore(NewFakeStore())
+	store := &readOnlyStore{Store: NewFakeStore()}
 	immutableFs := NewImmutableFS(make(FakeFS), store, 1)
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	assert.Error(t, err)
@@ -205,25 +205,23 @@ func TestImmutableFS_DefensiveCopy(t *testing.T) {
 	assert.Equal(t, origKey, fs2.fileSystem.Key)
 }
 
-func TestReadOnlyStore(t *testing.T) {
+func TestImmutableFS_ReadOnly(t *testing.T) {
+	fakeFs := make(FakeFS)
 	store := NewFakeStore()
-	var entry Entry
-	require.NoError(t, store.AddEntry(nil, &entry))
-	roStore := ReadOnlyStore(store)
-	var fetchedEntry Entry
-	require.NoError(t, roStore.EntryById(nil, 1, 0, &fetchedEntry))
-	assert.Equal(t, entry, fetchedEntry)
-	assert.Equal(t, ErrReadOnly, roStore.AddEntry(nil, &entry))
-}
+	immutableFs := NewImmutableFS(fakeFs, store, 1)
+	readOnlyFs := NewImmutableFS(fakeFs, store, 1, ReadOnly())
+	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
+	require.NoError(t, err)
 
-func TestReadOnlyFS(t *testing.T) {
-	fileSystem := FakeFS{"hello.txt": ([]byte)("Hello World!")}
-	roFileSystem := ReadOnlyFS(fileSystem)
-	assert.True(t, roFileSystem.Exists("hello.txt"))
-	contents, err := readFile(roFileSystem, "hello.txt")
+	files, err := readOnlyFs.List(nil, map[int64]bool{1: true})
+	require.NoError(t, err)
+	require.Len(t, files, 1)
+
+	contents, err := fs.ReadFile(readOnlyFs, files[0].Path())
 	require.NoError(t, err)
 	assert.Equal(t, "Hello World!", string(contents))
-	_, err = roFileSystem.Write("goodbye.txt")
+
+	_, err = readOnlyFs.Write("goodbye.txt", ([]byte)("Goodbye World!"))
 	assert.Equal(t, ErrReadOnly, err)
 }
 

@@ -69,19 +69,7 @@ func NewFakeStore() Store {
 	return &store
 }
 
-// ReadOnlyStore returns a read-only version of Store. Calling AddEntry()
-// on returned Store returns ErrReadOnly.
-func ReadOnlyStore(store Store) Store {
-	return &readOnlyStore{Store: store}
-}
-
-// ReadOnlyFS returns a read-only version of fileSystem. Calling Write()
-// on returned file system returns ErrReadOnly.
-func ReadOnlyFS(fileSystem FS) FS {
-	return &readOnlyFS{FS: fileSystem}
-}
-
-// Option represents an optional settings for ImmutableFS.
+// Option represents an optional setting for ImmutableFS.
 type Option interface {
 	apply(fs *ImmutableFS)
 }
@@ -89,6 +77,11 @@ type Option interface {
 // Key enables encryption with given encryption key.
 func Key(key []byte) Option {
 	return &keyOption{Key: copyKey(key)}
+}
+
+// ReadOnly makes calls to Write() return ErrReadOnly
+func ReadOnly() Option {
+	return readOnlyOption{}
 }
 
 // ImmutableFS represents an immutable file system featuring AES-256
@@ -100,6 +93,9 @@ type ImmutableFS struct {
 
 	// fileSystem stores the contents of the files by checksum
 	fileSystem aesFS
+
+	// If true, instance is read-only
+	readOnly bool
 }
 
 // NewImmutableFS creates a new ImmutableFS instance.
@@ -144,6 +140,9 @@ func (f *ImmutableFS) Open(name string) (fs.File, error) {
 // Write writes a new file. name is the file name e.g "document.pdf" Write
 // returns the Id of the new file, e.g 12345.
 func (f *ImmutableFS) Write(name string, contents []byte) (int64, error) {
+	if f.readOnly {
+		return 0, ErrReadOnly
+	}
 	checksum, err := f.fileSystem.Write(contents)
 	if err != nil {
 		return 0, err
@@ -288,4 +287,11 @@ type keyOption struct {
 
 func (k *keyOption) apply(fs *ImmutableFS) {
 	fs.fileSystem.Key = k.Key
+}
+
+type readOnlyOption struct {
+}
+
+func (r readOnlyOption) apply(fs *ImmutableFS) {
+	fs.readOnly = true
 }
