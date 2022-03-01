@@ -11,18 +11,25 @@ import (
 	"io"
 )
 
+// Owner represents a file owner. Owners can see only their own files.
+type Owner struct {
+
+	// The owner ID
+	Id int64
+
+	// The encryption key for the owner. May be nil if no encryption is
+	// to be done for the owner.
+	Key []byte
+}
+
 // aesFS is an encrypted file system storing immutable data
 type aesFS struct {
 
 	// The underlying file system
 	FileSystem FS
 
-	// The owner's AES encryption key. If nil, no encryption is done.
-	Key []byte
-
-	// The owner ID. Each owner has their own data encrypted with their
-	// encryption key.
-	OwnerId int64
+	// The file owner
+	Owner Owner
 }
 
 // Write writes data to the underlying file system and returns the 64 digit
@@ -30,7 +37,7 @@ type aesFS struct {
 func (a *aesFS) Write(contents []byte) (string, error) {
 	binaryId := checksum(contents)
 	id := hex.EncodeToString(binaryId)
-	name := idToPath(id, a.OwnerId)
+	name := idToPath(id, a.Owner.Id)
 	if a.FileSystem.Exists(name) {
 		return id, nil
 	}
@@ -43,16 +50,16 @@ func (a *aesFS) Write(contents []byte) (string, error) {
 // Open returns a reader to retrieve data. checksum is the 64 digit hexadecimal
 // checksum of the data that Write returned.
 func (a *aesFS) Open(checksum string) (io.ReadCloser, error) {
-	name := idToPath(checksum, a.OwnerId)
+	name := idToPath(checksum, a.Owner.Id)
 	var binaryId []byte
 	var block cipher.Block
 	var err error
-	if a.Key != nil {
+	if a.Owner.Key != nil {
 		binaryId, err = hex.DecodeString(checksum)
 		if err != nil {
 			return nil, err
 		}
-		block, err = aes.NewCipher(a.Key)
+		block, err = aes.NewCipher(a.Owner.Key)
 		if err != nil {
 			return nil, err
 		}
@@ -71,8 +78,8 @@ func (a *aesFS) write(
 	name string, binaryId, contents []byte) error {
 	var block cipher.Block
 	var err error
-	if a.Key != nil {
-		block, err = aes.NewCipher(a.Key)
+	if a.Owner.Key != nil {
+		block, err = aes.NewCipher(a.Owner.Key)
 		if err != nil {
 			return err
 		}
@@ -93,7 +100,7 @@ func (a *aesFS) addEncryption(
 	writer io.WriteCloser,
 	block cipher.Block,
 	binaryId []byte) io.WriteCloser {
-	stream := cipher.NewCFBEncrypter(block, iv(binaryId, a.OwnerId))
+	stream := cipher.NewCFBEncrypter(block, iv(binaryId, a.Owner.Id))
 	return cipher.StreamWriter{S: stream, W: writer}
 }
 
@@ -101,7 +108,7 @@ func (a *aesFS) addDecryption(
 	reader io.ReadCloser,
 	block cipher.Block,
 	binaryId []byte) io.ReadCloser {
-	stream := cipher.NewCFBDecrypter(block, iv(binaryId, a.OwnerId))
+	stream := cipher.NewCFBDecrypter(block, iv(binaryId, a.Owner.Id))
 	streamReader := cipher.StreamReader{S: stream, R: reader}
 	return &readerCloser{Reader: streamReader, Closer: reader}
 }

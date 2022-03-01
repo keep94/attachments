@@ -54,9 +54,14 @@ func TestEncFileSystem_Encryption(t *testing.T) {
 	key2 := kdf.Random(32)
 
 	fakeFS := make(FakeFS)
-	fileSystem1 := &aesFS{FileSystem: fakeFS, Key: key1, OwnerId: 1}
-	fileSystem2 := &aesFS{FileSystem: fakeFS, Key: key2, OwnerId: 2}
-
+	fileSystem1 := &aesFS{
+		FileSystem: fakeFS,
+		Owner:      Owner{Key: key1, Id: 1},
+	}
+	fileSystem2 := &aesFS{
+		FileSystem: fakeFS,
+		Owner:      Owner{Key: key2, Id: 2},
+	}
 	helloId, err := fileSystem1.Write(([]byte)("Hello World!"))
 	require.NoError(t, err)
 	assert.Len(t, helloId, 64)
@@ -78,13 +83,13 @@ func TestEncFileSystem_Encryption(t *testing.T) {
 	assert.Len(t, fakeFS, oldFileCount+1)
 
 	// Assert that using the wrong encryption key to read does not work.
-	fileSystem1.Key = key2
+	fileSystem1.Owner.Key = key2
 	contents, err = readFile(fileSystem1, helloId)
 	require.NoError(t, err)
 	assert.NotEqual(t, "Hello World!", string(contents))
 
 	// Assert that we get ErrNotExist
-	fileSystem1.Key = key1
+	fileSystem1.Owner.Key = key1
 	_, err = readFile(fileSystem1, kNotFoundId)
 	assert.Equal(t, os.ErrNotExist, err)
 }

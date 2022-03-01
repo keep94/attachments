@@ -19,8 +19,9 @@ var (
 func TestImmutableFS(t *testing.T) {
 	fakeFs := make(FakeFS)
 	store := NewFakeStore()
-	immutableFs1 := NewImmutableFS(fakeFs, store, 1)
-	immutableFs2 := NewImmutableFS(fakeFs, store, 2, Key(kdf.Random(32)))
+	immutableFs1 := NewImmutableFS(fakeFs, store, Owner{Id: 1})
+	immutableFs2 := NewImmutableFS(
+		fakeFs, store, Owner{Id: 2, Key: kdf.Random(32)})
 	firstId, err := immutableFs1.Write(
 		"hello.txt", ([]byte)("Hello World!"))
 	require.NoError(t, err)
@@ -145,14 +146,14 @@ func TestImmutableFS(t *testing.T) {
 
 func TestImmutableFS_WriteError(t *testing.T) {
 	fakeFs := &readOnlyFS{FS: make(FakeFS)}
-	immutableFs := NewImmutableFS(fakeFs, NewFakeStore(), 1)
+	immutableFs := NewImmutableFS(fakeFs, NewFakeStore(), Owner{Id: 1})
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	assert.Error(t, err)
 }
 
 func TestImmutableFS_ReadError(t *testing.T) {
 	fakeFs := make(FakeFS)
-	immutableFs := NewImmutableFS(fakeFs, NewFakeStore(), 1)
+	immutableFs := NewImmutableFS(fakeFs, NewFakeStore(), Owner{Id: 1})
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	require.NoError(t, err)
 
@@ -171,13 +172,13 @@ func TestImmutableFS_ReadError(t *testing.T) {
 
 func TestImmutableFS_DBErrorOnWrite(t *testing.T) {
 	store := &readOnlyStore{Store: NewFakeStore()}
-	immutableFs := NewImmutableFS(make(FakeFS), store, 1)
+	immutableFs := NewImmutableFS(make(FakeFS), store, Owner{Id: 1})
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	assert.Error(t, err)
 }
 
 func TestImmutableFS_DBErrorOnRead(t *testing.T) {
-	immutableFs := NewImmutableFS(make(FakeFS), NewFakeStore(), 1)
+	immutableFs := NewImmutableFS(make(FakeFS), NewFakeStore(), Owner{Id: 1})
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	require.NoError(t, err)
 
@@ -191,25 +192,11 @@ func TestImmutableFS_DBErrorOnRead(t *testing.T) {
 		err)
 }
 
-func TestImmutableFS_DefensiveCopy(t *testing.T) {
-	fs := make(FakeFS)
-	store := NewFakeStore()
-	fs1 := NewImmutableFS(fs, store, 1)
-	origKey := kdf.Random(32)
-	key := make([]byte, len(origKey))
-	copy(key, origKey)
-	option := Key(key)
-	key[0] ^= 0xFF
-	fs2 := NewImmutableFS(fs, store, 2, option)
-	assert.Nil(t, fs1.fileSystem.Key)
-	assert.Equal(t, origKey, fs2.fileSystem.Key)
-}
-
 func TestImmutableFS_ReadOnly(t *testing.T) {
 	fakeFs := make(FakeFS)
 	store := NewFakeStore()
-	immutableFs := NewImmutableFS(fakeFs, store, 1)
-	readOnlyFs := NewImmutableFS(fakeFs, store, 1, ReadOnly())
+	immutableFs := NewImmutableFS(fakeFs, store, Owner{Id: 1})
+	readOnlyFs := NewImmutableFS(fakeFs, store, Owner{Id: 1}, ReadOnly())
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	require.NoError(t, err)
 
