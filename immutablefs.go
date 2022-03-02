@@ -49,6 +49,17 @@ func (e *Entry) Path() string {
 	return fmt.Sprintf("%d/%s", e.Id, e.Name)
 }
 
+// FormatTime returns the file timestamp in the form of "02-Jan-06 15:04"
+// in the local timezone.
+func (e *Entry) FormatTime() string {
+	return time.Unix(e.Ts, 0).Format("02-Jan-06 15:04")
+}
+
+// FormatSize returns the file size as readable string such as "1.23 MB"
+func (e *Entry) FormatSize() string {
+	return formatSize(e.Size)
+}
+
 // Store stores and retrieves file entries from a database.
 type Store interface {
 

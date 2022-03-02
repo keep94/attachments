@@ -212,6 +212,37 @@ func TestImmutableFS_ReadOnly(t *testing.T) {
 	assert.Equal(t, ErrReadOnly, err)
 }
 
+func TestEntry_FormatTime(t *testing.T) {
+	atime := time.Date(2022, 3, 1, 16, 43, 54, 0, time.Local)
+	entry := Entry{Ts: atime.Unix()}
+	assert.Equal(t, "01-Mar-22 16:43", entry.FormatTime())
+}
+
+func TestEntry_FormatSize(t *testing.T) {
+	assert.Equal(t, "--", sizeString(-35))
+	assert.Equal(t, "0 B", sizeString(0))
+	assert.Equal(t, "9 B", sizeString(9))
+	assert.Equal(t, "70 B", sizeString(70))
+	assert.Equal(t, "520 B", sizeString(520))
+	assert.Equal(t, "995 B", sizeString(995))
+	assert.Equal(t, "9.87 KB", sizeString(9874))
+	assert.Equal(t, "43.5 KB", sizeString(43450))
+	assert.Equal(t, "127 KB", sizeString(126999))
+	assert.Equal(t, "1.00 MB", sizeString(999512))
+	assert.Equal(t, "13.2 MB", sizeString(13201489))
+	assert.Equal(t, "576 MB", sizeString(575500001))
+	assert.Equal(t, "4.35 GB", sizeString(4350123456))
+	assert.Equal(t, "43.5 GB", sizeString(43541234567))
+	assert.Equal(t, "435 GB", sizeString(435412345678))
+	assert.Equal(t, "4350 GB", sizeString(4354123456789))
+	assert.Equal(t, "43600 GB", sizeString(43551234567890))
+}
+
+func sizeString(size int64) string {
+	entry := Entry{Size: size}
+	return entry.FormatSize()
+}
+
 type errorStore struct {
 }
 
