@@ -174,8 +174,8 @@ func (f *ImmutableFS) Write(name string, contents []byte) (int64, error) {
 // If an id has no file associated with it, the slice returned will not have
 // an Entry for that id.
 func (f *ImmutableFS) List(
-	t db.Transaction, ids map[int64]bool) ([]Entry, error) {
-	var result []Entry
+	t db.Transaction, ids map[int64]bool) ([]*Entry, error) {
+	var result []*Entry
 	for id, ok := range ids {
 		if !ok {
 			continue
@@ -188,7 +188,7 @@ func (f *ImmutableFS) List(
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, entry)
+		result = append(result, &entry)
 	}
 	sort.Slice(
 		result, func(i, j int) bool { return result[i].Id < result[j].Id })
