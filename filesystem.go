@@ -29,6 +29,11 @@ func NewFS(root string) FS {
 	return &realFS{root: root}
 }
 
+// NilFS returns an empty file system that cannot be written to.
+func NilFS() FS {
+	return nilFS{}
+}
+
 // FakeFS is an in-memory implementation of FS for testing.
 // The keys are the file names, the values are the file contents.
 type FakeFS map[string][]byte
@@ -95,17 +100,17 @@ func (r *realFS) fullPath(name string) string {
 	return path.Join(r.root, name)
 }
 
-type rofs interface {
-
-	// Open opens a file
-	Open(name string) (io.ReadCloser, error)
+type nilFS struct {
 }
 
-func readFile(fileSystem rofs, name string) ([]byte, error) {
-	reader, err := fileSystem.Open(name)
-	if err != nil {
-		return nil, err
-	}
-	defer reader.Close()
-	return io.ReadAll(reader)
+func (n nilFS) Open(name string) (io.ReadCloser, error) {
+	return nil, os.ErrNotExist
+}
+
+func (n nilFS) Exists(name string) bool {
+	return false
+}
+
+func (n nilFS) Write(name string) (io.WriteCloser, error) {
+	return nil, os.ErrPermission
 }

@@ -1,6 +1,7 @@
 package attachments
 
 import (
+	"io"
 	"os"
 	"testing"
 
@@ -92,4 +93,19 @@ func TestEncFileSystem_Encryption(t *testing.T) {
 	fileSystem1.Owner.Key = key1
 	_, err = readFile(fileSystem1, kNotFoundId)
 	assert.Equal(t, os.ErrNotExist, err)
+}
+
+type rofs interface {
+
+	// Open opens a file
+	Open(name string) (io.ReadCloser, error)
+}
+
+func readFile(fileSystem rofs, name string) ([]byte, error) {
+	reader, err := fileSystem.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	return io.ReadAll(reader)
 }

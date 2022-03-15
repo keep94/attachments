@@ -16,9 +16,6 @@ import (
 var (
 	// Indicates that the Id does not exist in the database.
 	ErrNoSuchId = errors.New("attachments: No such Id")
-
-	// Indicates writing to a read-only resource.
-	ErrReadOnly = errors.New("attachments: read-only")
 )
 
 // Entry represents a file entry
@@ -85,7 +82,7 @@ type Option interface {
 	apply(fs *ImmutableFS)
 }
 
-// ReadOnly makes calls to Write() return ErrReadOnly
+// ReadOnly makes calls to Write() return fs.ErrPermission.
 func ReadOnly() Option {
 	return readOnlyOption{}
 }
@@ -151,7 +148,7 @@ func (f *ImmutableFS) Open(name string) (fs.File, error) {
 // returns the Id of the new file, e.g 12345.
 func (f *ImmutableFS) Write(name string, contents []byte) (int64, error) {
 	if f.readOnly {
-		return 0, ErrReadOnly
+		return 0, fs.ErrPermission
 	}
 	checksum, err := f.fileSystem.Write(contents)
 	if err != nil {
@@ -267,22 +264,6 @@ func (f fakeStore) EntryById(
 	}
 	*entry = f[index]
 	return nil
-}
-
-type readOnlyStore struct {
-	Store
-}
-
-func (r *readOnlyStore) AddEntry(t db.Transaction, entry *Entry) error {
-	return ErrReadOnly
-}
-
-type readOnlyFS struct {
-	FS
-}
-
-func (r *readOnlyFS) Write(name string) (io.WriteCloser, error) {
-	return nil, ErrReadOnly
 }
 
 type readOnlyOption struct {

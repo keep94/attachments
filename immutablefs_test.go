@@ -145,8 +145,7 @@ func TestImmutableFS(t *testing.T) {
 }
 
 func TestImmutableFS_WriteError(t *testing.T) {
-	fakeFs := &readOnlyFS{FS: make(FakeFS)}
-	immutableFs := NewImmutableFS(fakeFs, NewFakeStore(), Owner{Id: 1})
+	immutableFs := NewImmutableFS(NilFS(), NewFakeStore(), Owner{Id: 1})
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	assert.Error(t, err)
 }
@@ -171,8 +170,7 @@ func TestImmutableFS_ReadError(t *testing.T) {
 }
 
 func TestImmutableFS_DBErrorOnWrite(t *testing.T) {
-	store := &readOnlyStore{Store: NewFakeStore()}
-	immutableFs := NewImmutableFS(make(FakeFS), store, Owner{Id: 1})
+	immutableFs := NewImmutableFS(make(FakeFS), errorStore{}, Owner{Id: 1})
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	assert.Error(t, err)
 }
@@ -209,7 +207,7 @@ func TestImmutableFS_ReadOnly(t *testing.T) {
 	assert.Equal(t, "Hello World!", string(contents))
 
 	_, err = readOnlyFs.Write("goodbye.txt", ([]byte)("Goodbye World!"))
-	assert.Equal(t, ErrReadOnly, err)
+	assert.Equal(t, fs.ErrPermission, err)
 }
 
 func TestEntry_FormatTime(t *testing.T) {
