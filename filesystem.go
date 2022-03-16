@@ -21,12 +21,13 @@ type FS interface {
 }
 
 // NewFS returns a file system backed by disk rooted at path root.
-func NewFS(root string) FS {
+// If root does not exist or is not a directory, NewFS returns os.ErrNotExist.
+func NewFS(root string) (FS, error) {
 	fileInfo, err := os.Stat(root)
 	if err != nil || !fileInfo.IsDir() {
-		return nil
+		return nil, os.ErrNotExist
 	}
-	return &realFS{root: root}
+	return &realFS{root: root}, nil
 }
 
 // NilFS returns an empty file system that cannot be written to.
