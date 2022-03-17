@@ -77,80 +77,82 @@ func NewFakeStore() Store {
 	return &store
 }
 
-// Option represents an optional setting for ImmutableFS.
-type Option interface {
-	apply(fs *ImmutableFS)
-}
-
-// ReadOnly makes calls to Write() return fs.ErrPermission.
-func ReadOnly() Option {
-	return readOnlyOption{}
-}
-
 // ImmutableFS represents an immutable file system featuring AES-256
-// encryption.
-type ImmutableFS struct {
+// encryption. Note that ImmutableFS implements io/fs.FS
+type ImmutableFS interface {
 
-	// Store is the database store for the file entries
-	store Store
+	// Open opens the named file. name is of the form EntryId/EntryName e.g
+	// "12345/document.pdf"
+	Open(name string) (fs.File, error)
 
-	// fileSystem stores the contents of the files by checksum
-	fileSystem aesFS
+	// Write writes a new file. name is the file name e.g "document.pdf."
+	// Write returns the Id of the new file, e.g 12345. If this instance
+	// is read-only, Write returns fs.ErrPermission.
+	Write(name string, contents []byte) (int64, error)
 
-	// If true, instance is read-only
-	readOnly bool
+	// List returns the files with given ids ordered by id.
+	// If an id has no file associated with it, the slice returned will not
+	// have an Entry for that id.
+	List(t db.Transaction, ids map[int64]bool) ([]Entry, error)
+
+	// ReadOnly returns true if this instance is read-only.
+	ReadOnly() bool
+
+	private()
 }
 
 // NewImmutableFS creates a new ImmutableFS instance.
 // fileSystem is where the contents of files from all owners are stored.
-// store is where file meta data from all owners are stored such as size and
-// timestamp. owner specifies the file owner. The returned instance will
-// store and retrieve files only for that owner.
-func NewImmutableFS(
-	fileSystem FS, store Store, owner Owner, options ...Option) *ImmutableFS {
-	result := &ImmutableFS{
-		store: store,
-		fileSystem: aesFS{
+// store is where file meta data from all owners are stored such as size
+// and timestamp. owner specifies the file owner. The returned instance
+// will store and retrieve files only for that owner.
+func NewImmutableFS(fileSystem FS, store Store, owner Owner) ImmutableFS {
+	return &immutableFS{
+		Store: store,
+		aesFS: aesFS{
 			FileSystem: fileSystem,
 			Owner:      owner,
 		},
 	}
-	for _, o := range options {
-		o.apply(result)
-	}
-	return result
 }
 
-// Open opens the named file. name is of the form EntryId/EntryName e.g
-// "12345/document.pdf"
-func (f *ImmutableFS) Open(name string) (fs.File, error) {
+// ReadOnly creates a read-only wrapper around fileSystem.
+// If fileSystem is already read-only, ReadOnly returns it unchanged.
+func ReadOnly(fileSystem ImmutableFS) ImmutableFS {
+	if fileSystem.ReadOnly() {
+		return fileSystem
+	}
+	return &roImmutableFS{ImmutableFS: fileSystem}
+}
+
+type immutableFS struct {
+	Store
+	aesFS
+}
+
+func (f *immutableFS) Open(name string) (fs.File, error) {
 	pathErr := &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	id, baseName, ok := parsePath(name)
 	if !ok {
 		return nil, pathErr
 	}
 	var entry Entry
-	err := f.store.EntryById(nil, id, f.fileSystem.Owner.Id, &entry)
+	err := f.EntryById(nil, id, f.Owner.Id, &entry)
 	if err != nil {
 		return nil, pathErr
 	}
 	if baseName != entry.Name {
 		return nil, pathErr
 	}
-	readCloser, err := f.fileSystem.Open(entry.Checksum)
+	readCloser, err := f.aesFS.Open(entry.Checksum)
 	if err != nil {
 		return nil, pathErr
 	}
 	return &immutableFile{ReadCloser: readCloser, entry: &entry}, nil
 }
 
-// Write writes a new file. name is the file name e.g "document.pdf" Write
-// returns the Id of the new file, e.g 12345.
-func (f *ImmutableFS) Write(name string, contents []byte) (int64, error) {
-	if f.readOnly {
-		return 0, fs.ErrPermission
-	}
-	checksum, err := f.fileSystem.Write(contents)
+func (f *immutableFS) Write(name string, contents []byte) (int64, error) {
+	checksum, err := f.aesFS.Write(contents)
 	if err != nil {
 		return 0, err
 	}
@@ -158,19 +160,16 @@ func (f *ImmutableFS) Write(name string, contents []byte) (int64, error) {
 		Name:     name,
 		Size:     int64(len(contents)),
 		Ts:       time.Now().Unix(),
-		OwnerId:  f.fileSystem.Owner.Id,
+		OwnerId:  f.Owner.Id,
 		Checksum: checksum,
 	}
-	if err := f.store.AddEntry(nil, &entry); err != nil {
+	if err := f.AddEntry(nil, &entry); err != nil {
 		return 0, err
 	}
 	return entry.Id, nil
 }
 
-// List returns the files with given ids ordered by id.
-// If an id has no file associated with it, the slice returned will not have
-// an Entry for that id.
-func (f *ImmutableFS) List(
+func (f *immutableFS) List(
 	t db.Transaction, ids map[int64]bool) ([]Entry, error) {
 	var result []Entry
 	var entry Entry
@@ -178,7 +177,7 @@ func (f *ImmutableFS) List(
 		if !ok {
 			continue
 		}
-		err := f.store.EntryById(t, id, f.fileSystem.Owner.Id, &entry)
+		err := f.EntryById(t, id, f.Owner.Id, &entry)
 		if err == ErrNoSuchId {
 			continue
 		}
@@ -190,6 +189,26 @@ func (f *ImmutableFS) List(
 	sort.Slice(
 		result, func(i, j int) bool { return result[i].Id < result[j].Id })
 	return result, nil
+}
+
+func (f *immutableFS) ReadOnly() bool {
+	return false
+}
+
+func (f *immutableFS) private() {
+}
+
+type roImmutableFS struct {
+	ImmutableFS
+}
+
+func (f *roImmutableFS) Write(
+	name string, contents []byte) (int64, error) {
+	return 0, fs.ErrPermission
+}
+
+func (f *roImmutableFS) ReadOnly() bool {
+	return true
 }
 
 func parsePath(name string) (id int64, baseName string, ok bool) {
@@ -264,11 +283,4 @@ func (f fakeStore) EntryById(
 	}
 	*entry = f[index]
 	return nil
-}
-
-type readOnlyOption struct {
-}
-
-func (r readOnlyOption) apply(fs *ImmutableFS) {
-	fs.readOnly = true
 }

@@ -70,11 +70,10 @@ func TestImmutableFS(t *testing.T) {
 	assert.Equal(t, "3/hello2.txt", entries[0].Path())
 	assert.Equal(t, "4/goodbye.txt", entries[1].Path())
 
-	// Test that List correctly handles database errors.
-	immutableFs2.store = errorStore{}
-	_, err = immutableFs2.List(nil, map[int64]bool{1: true})
-	assert.Error(t, err)
-	immutableFs2.store = store
+	// Test that we get nothing back if no ids found.
+	entries, err = immutableFs2.List(nil, map[int64]bool{1: true})
+	require.NoError(t, err)
+	assert.Empty(t, entries)
 
 	// Invalid path
 	_, err = immutableFs1.Open("/x")
@@ -144,6 +143,12 @@ func TestImmutableFS(t *testing.T) {
 	assert.Less(t, time.Now().Sub(fileInfo.ModTime()), 5*time.Second)
 }
 
+func TestImmutableFS_ListError(t *testing.T) {
+	fileSystem := NewImmutableFS(make(FakeFS), errorStore{}, Owner{Id: 1})
+	_, err := fileSystem.List(nil, map[int64]bool{1: true})
+	assert.Error(t, err)
+}
+
 func TestImmutableFS_WriteError(t *testing.T) {
 	immutableFs := NewImmutableFS(NilFS(), NewFakeStore(), Owner{Id: 1})
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
@@ -177,13 +182,9 @@ func TestImmutableFS_DBErrorOnWrite(t *testing.T) {
 
 func TestImmutableFS_DBErrorOnRead(t *testing.T) {
 	immutableFs := NewImmutableFS(make(FakeFS), NewFakeStore(), Owner{Id: 1})
-	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
-	require.NoError(t, err)
-
-	immutableFs.store = NewFakeStore()
 
 	// Should get an error reading
-	_, err = immutableFs.Open("1/hello.txt")
+	_, err := immutableFs.Open("1/hello.txt")
 	assert.Equal(
 		t,
 		&fs.PathError{Op: "open", Path: "1/hello.txt", Err: fs.ErrNotExist},
@@ -194,7 +195,8 @@ func TestImmutableFS_ReadOnly(t *testing.T) {
 	fakeFs := make(FakeFS)
 	store := NewFakeStore()
 	immutableFs := NewImmutableFS(fakeFs, store, Owner{Id: 1})
-	readOnlyFs := NewImmutableFS(fakeFs, store, Owner{Id: 1}, ReadOnly())
+	readOnlyFs := ReadOnly(immutableFs)
+	assert.Equal(t, readOnlyFs, ReadOnly(readOnlyFs))
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	require.NoError(t, err)
 
