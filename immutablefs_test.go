@@ -182,7 +182,8 @@ func TestImmutableFS_DBErrorOnWrite(t *testing.T) {
 }
 
 func TestImmutableFS_DBErrorOnRead(t *testing.T) {
-	immutableFs := NewImmutableFS(NewInMemoryFS(), newFakeStore(), Owner{Id: 1})
+	immutableFs := NewImmutableFS(
+		NewInMemoryFS(), newFakeStore(), Owner{Id: 1})
 
 	// Should get an error reading
 	_, err := immutableFs.Open("1/hello.txt")
@@ -193,10 +194,11 @@ func TestImmutableFS_DBErrorOnRead(t *testing.T) {
 }
 
 func TestImmutableFS_ReadOnly(t *testing.T) {
-	fakeFs := NewInMemoryFS()
-	store := newFakeStore()
-	immutableFs := NewImmutableFS(fakeFs, store, Owner{Id: 1})
+	immutableFs := NewImmutableFS(
+		NewInMemoryFS(), newFakeStore(), Owner{Id: 1})
+	assert.False(t, immutableFs.ReadOnly())
 	readOnlyFs := ReadOnly(immutableFs)
+	assert.True(t, readOnlyFs.ReadOnly())
 	assert.Equal(t, readOnlyFs, ReadOnly(readOnlyFs))
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	require.NoError(t, err)
@@ -211,6 +213,26 @@ func TestImmutableFS_ReadOnly(t *testing.T) {
 
 	_, err = readOnlyFs.Write("goodbye.txt", ([]byte)("Goodbye World!"))
 	assert.Equal(t, fs.ErrPermission, err)
+}
+
+func TestImmutableFS_WrongKeySize(t *testing.T) {
+	owner := Owner{Id: 1, Key: kdf.Random(25)}
+	immutableFs := NewImmutableFS(NewInMemoryFS(), newFakeStore(), owner)
+	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
+	assert.Error(t, err)
+}
+
+func TestImmutableFS_WrongKeySizeRead(t *testing.T) {
+	owner := Owner{Id: 1}
+	fakeFs := NewInMemoryFS()
+	store := newFakeStore()
+	immutableFs := NewImmutableFS(fakeFs, store, owner)
+	owner.Key = kdf.Random(25)
+	badKeyFs := NewImmutableFS(fakeFs, store, owner)
+	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
+	require.NoError(t, err)
+	_, err = fs.ReadFile(badKeyFs, "1/hello.txt")
+	assert.Error(t, err)
 }
 
 func TestEntry_FormatTime(t *testing.T) {

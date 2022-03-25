@@ -38,6 +38,7 @@ func TestEncFileSystem_NoEncryption(t *testing.T) {
 
 	_, err = readFile(fileSystem, kNotFoundId)
 	assert.Equal(t, os.ErrNotExist, err)
+	assert.Nil(t, readBytes(fileSystem, kNotFoundId))
 
 	// Assert contents not encrypted
 	contents := readBytes(fakeFS, idToPath(helloId, 0))
@@ -87,4 +88,18 @@ func TestEncFileSystem_Encryption(t *testing.T) {
 	fileSystem1.Owner.Key = key1
 	_, err = readFile(fileSystem1, kNotFoundId)
 	assert.Equal(t, os.ErrNotExist, err)
+}
+
+func TestEncFileSystem_ReadBadId(t *testing.T) {
+	key1 := kdf.Random(32)
+
+	fakeFS := NewInMemoryFS()
+	fileSystem1 := &aesFS{
+		FileSystem: fakeFS,
+		Owner:      Owner{Key: key1, Id: 1},
+	}
+	_, err := readFile(fileSystem1, "")
+	assert.Error(t, err)
+	_, err = readFile(fileSystem1, "a_bad_id")
+	assert.Error(t, err)
 }

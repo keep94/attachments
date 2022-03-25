@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 )
@@ -50,10 +51,12 @@ func (a *aesFS) Write(contents []byte) (string, error) {
 // Open returns a reader to retrieve data. checksum is the 64 digit hexadecimal
 // checksum of the data that Write returned.
 func (a *aesFS) Open(checksum string) (io.ReadCloser, error) {
-	name := idToPath(checksum, a.Owner.Id)
+	name, err := safeIdToPath(checksum, a.Owner.Id)
+	if err != nil {
+		return nil, err
+	}
 	var binaryId []byte
 	var block cipher.Block
-	var err error
 	if a.Owner.Key != nil {
 		binaryId, err = hex.DecodeString(checksum)
 		if err != nil {
@@ -131,10 +134,19 @@ func iv(checksum []byte, owner int64) []byte {
 	return hash.Sum(nil)[:aes.BlockSize]
 }
 
+// safeIdToPath converts a 64 digit hexadecimal ID and ownerId to a path.
+func safeIdToPath(id string, ownerId int64) (string, error) {
+	if len(id) < 2 {
+		return "", errors.New("ids should be 64 hexadecimal digits")
+	}
+	return fmt.Sprintf("%d/%s/%s", ownerId, id[:2], id), nil
+}
+
 // idToPath converts a 64 digit hexadecimal ID and ownerId to a path.
 func idToPath(id string, ownerId int64) string {
-	if len(id) < 2 {
-		panic("ids should be 64 hexadecimal digits")
+	result, err := safeIdToPath(id, ownerId)
+	if err != nil {
+		panic(err)
 	}
-	return fmt.Sprintf("%d/%s/%s", ownerId, id[:2], id)
+	return result
 }
