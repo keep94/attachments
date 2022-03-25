@@ -18,7 +18,7 @@ var (
 
 func TestImmutableFS(t *testing.T) {
 	fakeFs := NewInMemoryFS()
-	store := NewFakeStore()
+	store := newFakeStore()
 	immutableFs1 := NewImmutableFS(fakeFs, store, Owner{Id: 1})
 	immutableFs2 := NewImmutableFS(
 		fakeFs, store, Owner{Id: 2, Key: kdf.Random(32)})
@@ -152,14 +152,14 @@ func TestImmutableFS_ListError(t *testing.T) {
 }
 
 func TestImmutableFS_WriteError(t *testing.T) {
-	immutableFs := NewImmutableFS(NilFS(), NewFakeStore(), Owner{Id: 1})
+	immutableFs := NewImmutableFS(NilFS(), newFakeStore(), Owner{Id: 1})
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	assert.Error(t, err)
 }
 
 func TestImmutableFS_ReadError(t *testing.T) {
 	// Prime fakeStore so that we can test error reading filesystem
-	fakeStore := NewFakeStore()
+	fakeStore := newFakeStore()
 	immutableFs := NewImmutableFS(NewInMemoryFS(), fakeStore, Owner{Id: 1})
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	require.NoError(t, err)
@@ -182,7 +182,7 @@ func TestImmutableFS_DBErrorOnWrite(t *testing.T) {
 }
 
 func TestImmutableFS_DBErrorOnRead(t *testing.T) {
-	immutableFs := NewImmutableFS(NewInMemoryFS(), NewFakeStore(), Owner{Id: 1})
+	immutableFs := NewImmutableFS(NewInMemoryFS(), newFakeStore(), Owner{Id: 1})
 
 	// Should get an error reading
 	_, err := immutableFs.Open("1/hello.txt")
@@ -194,7 +194,7 @@ func TestImmutableFS_DBErrorOnRead(t *testing.T) {
 
 func TestImmutableFS_ReadOnly(t *testing.T) {
 	fakeFs := NewInMemoryFS()
-	store := NewFakeStore()
+	store := newFakeStore()
 	immutableFs := NewImmutableFS(fakeFs, store, Owner{Id: 1})
 	readOnlyFs := ReadOnly(immutableFs)
 	assert.Equal(t, readOnlyFs, ReadOnly(readOnlyFs))
@@ -254,4 +254,31 @@ func (errorStore) EntryById(
 
 func (errorStore) AddEntry(t db.Transaction, entry *Entry) error {
 	return errDatabase
+}
+
+type fakeStore []Entry
+
+func newFakeStore() Store {
+	var store fakeStore
+	return &store
+}
+
+func (f *fakeStore) AddEntry(t db.Transaction, entry *Entry) error {
+	newId := int64(len(*f)) + 1
+	entry.Id = newId
+	*f = append(*f, *entry)
+	return nil
+}
+
+func (f fakeStore) EntryById(
+	t db.Transaction, id, ownerId int64, entry *Entry) error {
+	index := int(id - 1)
+	if index < 0 || index >= len(f) {
+		return ErrNoSuchId
+	}
+	if ownerId != f[index].OwnerId {
+		return ErrNoSuchId
+	}
+	*entry = f[index]
+	return nil
 }

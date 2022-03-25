@@ -69,14 +69,6 @@ type Store interface {
 	EntryById(t db.Transaction, id, ownerId int64, entry *Entry) error
 }
 
-// NewFakeStore returns an in memory implementation of Store. Multiple
-// goroutines can concurrently read the returned Store as long as no
-// goroutines are writing to the returned store at the same time.
-func NewFakeStore() Store {
-	var store fakeStore
-	return &store
-}
-
 // ImmutableFS represents an immutable file system featuring AES-256
 // encryption. Note that ImmutableFS implements io/fs.FS
 type ImmutableFS interface {
@@ -260,27 +252,5 @@ func (f fileInfo) IsDir() bool {
 }
 
 func (f fileInfo) Sys() interface{} {
-	return nil
-}
-
-type fakeStore []Entry
-
-func (f *fakeStore) AddEntry(t db.Transaction, entry *Entry) error {
-	newId := int64(len(*f)) + 1
-	entry.Id = newId
-	*f = append(*f, *entry)
-	return nil
-}
-
-func (f fakeStore) EntryById(
-	t db.Transaction, id, ownerId int64, entry *Entry) error {
-	index := int(id - 1)
-	if index < 0 || index >= len(f) {
-		return ErrNoSuchId
-	}
-	if ownerId != f[index].OwnerId {
-		return ErrNoSuchId
-	}
-	*entry = f[index]
 	return nil
 }
