@@ -17,7 +17,7 @@ var (
 )
 
 func TestImmutableFS(t *testing.T) {
-	fakeFs := make(FakeFS)
+	fakeFs := NewInMemoryFS()
 	store := NewFakeStore()
 	immutableFs1 := NewImmutableFS(fakeFs, store, Owner{Id: 1})
 	immutableFs2 := NewImmutableFS(
@@ -51,7 +51,7 @@ func TestImmutableFS(t *testing.T) {
 	// The two "Hello World!" files written to immutableFs1 have the same
 	// content which is why we expect 4, not 5, files on the underlying file
 	// system.
-	assert.Len(t, fakeFs, 4)
+	assert.Equal(t, 4, numFiles(fakeFs))
 
 	entries, err := immutableFs2.List(
 		nil,
@@ -115,7 +115,7 @@ func TestImmutableFS(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, files, 1)
 	rawPath := idToPath(files[0].Checksum, files[0].OwnerId)
-	assert.Equal(t, contents, fakeFs[rawPath])
+	assert.Equal(t, contents, readBytes(fakeFs, rawPath))
 
 	contents, err = fs.ReadFile(immutableFs2, "4/goodbye.txt")
 	require.NoError(t, err)
@@ -126,7 +126,9 @@ func TestImmutableFS(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, files, 1)
 	rawPath = idToPath(files[0].Checksum, files[0].OwnerId)
-	assert.NotEqual(t, contents, fakeFs[rawPath])
+	encContents := readBytes(fakeFs, rawPath)
+	assert.NotNil(t, encContents)
+	assert.NotEqual(t, contents, encContents)
 
 	file, err := immutableFs2.Open("3/hello2.txt")
 	require.NoError(t, err)
@@ -144,7 +146,7 @@ func TestImmutableFS(t *testing.T) {
 }
 
 func TestImmutableFS_ListError(t *testing.T) {
-	fileSystem := NewImmutableFS(make(FakeFS), errorStore{}, Owner{Id: 1})
+	fileSystem := NewImmutableFS(NewInMemoryFS(), errorStore{}, Owner{Id: 1})
 	_, err := fileSystem.List(nil, map[int64]bool{1: true})
 	assert.Error(t, err)
 }
@@ -156,15 +158,14 @@ func TestImmutableFS_WriteError(t *testing.T) {
 }
 
 func TestImmutableFS_ReadError(t *testing.T) {
-	fakeFs := make(FakeFS)
-	immutableFs := NewImmutableFS(fakeFs, NewFakeStore(), Owner{Id: 1})
+	// Prime fakeStore so that we can test error reading filesystem
+	fakeStore := NewFakeStore()
+	immutableFs := NewImmutableFS(NewInMemoryFS(), fakeStore, Owner{Id: 1})
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	require.NoError(t, err)
 
-	// Wipe out all files underneath
-	for fileName := range fakeFs {
-		delete(fakeFs, fileName)
-	}
+	// Now do our real test
+	immutableFs = NewImmutableFS(NilFS(), fakeStore, Owner{Id: 1})
 
 	// Should get an error reading
 	_, err = immutableFs.Open("1/hello.txt")
@@ -175,13 +176,13 @@ func TestImmutableFS_ReadError(t *testing.T) {
 }
 
 func TestImmutableFS_DBErrorOnWrite(t *testing.T) {
-	immutableFs := NewImmutableFS(make(FakeFS), errorStore{}, Owner{Id: 1})
+	immutableFs := NewImmutableFS(NewInMemoryFS(), errorStore{}, Owner{Id: 1})
 	_, err := immutableFs.Write("hello.txt", ([]byte)("Hello World!"))
 	assert.Error(t, err)
 }
 
 func TestImmutableFS_DBErrorOnRead(t *testing.T) {
-	immutableFs := NewImmutableFS(make(FakeFS), NewFakeStore(), Owner{Id: 1})
+	immutableFs := NewImmutableFS(NewInMemoryFS(), NewFakeStore(), Owner{Id: 1})
 
 	// Should get an error reading
 	_, err := immutableFs.Open("1/hello.txt")
@@ -192,7 +193,7 @@ func TestImmutableFS_DBErrorOnRead(t *testing.T) {
 }
 
 func TestImmutableFS_ReadOnly(t *testing.T) {
-	fakeFs := make(FakeFS)
+	fakeFs := NewInMemoryFS()
 	store := NewFakeStore()
 	immutableFs := NewImmutableFS(fakeFs, store, Owner{Id: 1})
 	readOnlyFs := ReadOnly(immutableFs)

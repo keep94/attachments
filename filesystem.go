@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sync"
 )
 
 // FS is a very simple file system.
@@ -35,44 +36,74 @@ func NilFS() FS {
 	return nilFS{}
 }
 
-// FakeFS is an in-memory implementation of FS for testing.
-// The keys are the file names, the values are the file contents.
-type FakeFS map[string][]byte
+// NewInMemoryFS returns a new in memory file system that can be used
+// with multiple goroutines.
+func NewInMemoryFS() FS {
+	return &fakeFS{files: make(map[string][]byte)}
+}
 
-func (f FakeFS) Open(name string) (io.ReadCloser, error) {
-	contents, ok := f[name]
-	if !ok {
+type fakeFS struct {
+	lock  sync.Mutex
+	files map[string][]byte
+}
+
+func (f *fakeFS) Open(name string) (io.ReadCloser, error) {
+	contents := f.get(name)
+	if contents == nil {
 		return nil, os.ErrNotExist
 	}
 	return io.NopCloser(bytes.NewReader(contents)), nil
 }
 
-func (f FakeFS) Write(name string) (io.WriteCloser, error) {
-	return &fakeFSWriter{name: name, files: f}, nil
+func (f *fakeFS) Write(name string) (io.WriteCloser, error) {
+	return &fakeFSWriter{name: name, fs: f}, nil
 }
 
-func (f FakeFS) Exists(name string) bool {
-	_, ok := f[name]
-	return ok
+func (f *fakeFS) Exists(name string) bool {
+	contents := f.get(name)
+	return contents != nil
+}
+
+func (f *fakeFS) get(key string) []byte {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	return f.files[key]
+}
+
+func (f *fakeFS) put(key string, contents []byte) {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	f.files[key] = contents
+}
+
+func (f *fakeFS) numFiles() int {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	return len(f.files)
+}
+
+func numFiles(fileSystem FS) int {
+	return fileSystem.(*fakeFS).numFiles()
 }
 
 type fakeFSWriter struct {
-	buffer   bytes.Buffer
-	name     string
-	files    FakeFS
-	isClosed bool
+	buffer bytes.Buffer
+	name   string
+	fs     *fakeFS
 }
 
 func (f *fakeFSWriter) Write(p []byte) (n int, err error) {
-	if f.isClosed {
+	if f.fs == nil {
 		return 0, os.ErrClosed
 	}
 	return f.buffer.Write(p)
 }
 
 func (f *fakeFSWriter) Close() error {
-	f.files[f.name] = f.buffer.Bytes()
-	f.isClosed = true
+	if f.fs != nil {
+		f.fs.put(f.name, f.buffer.Bytes())
+		f.fs = nil
+	}
 	return nil
 }
 
@@ -114,4 +145,27 @@ func (n nilFS) Exists(name string) bool {
 
 func (n nilFS) Write(name string) (io.WriteCloser, error) {
 	return nil, os.ErrPermission
+}
+
+type rofs interface {
+
+	// Open opens a file
+	Open(name string) (io.ReadCloser, error)
+}
+
+func readFile(fileSystem rofs, name string) ([]byte, error) {
+	reader, err := fileSystem.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	return io.ReadAll(reader)
+}
+
+func readBytes(fileSystem rofs, name string) []byte {
+	result, err := readFile(fileSystem, name)
+	if err != nil {
+		return nil
+	}
+	return result
 }
