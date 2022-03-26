@@ -48,8 +48,8 @@ type fakeFS struct {
 }
 
 func (f *fakeFS) Open(name string) (io.ReadCloser, error) {
-	contents := f.get(name)
-	if contents == nil {
+	contents, ok := f.get(name)
+	if !ok {
 		return nil, os.ErrNotExist
 	}
 	return io.NopCloser(bytes.NewReader(contents)), nil
@@ -60,14 +60,15 @@ func (f *fakeFS) Write(name string) (io.WriteCloser, error) {
 }
 
 func (f *fakeFS) Exists(name string) bool {
-	contents := f.get(name)
-	return contents != nil
+	_, ok := f.get(name)
+	return ok
 }
 
-func (f *fakeFS) get(key string) []byte {
+func (f *fakeFS) get(key string) ([]byte, bool) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	return f.files[key]
+	contents, ok := f.files[key]
+	return contents, ok
 }
 
 func (f *fakeFS) put(key string, contents []byte) {
