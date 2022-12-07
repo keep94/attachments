@@ -85,7 +85,7 @@ type ImmutableFS interface {
 	// List returns the files with given ids ordered by id.
 	// If an id has no file associated with it, the slice returned will not
 	// have an Entry for that id.
-	List(t db.Transaction, ids map[int64]bool) ([]Entry, error)
+	List(t db.Transaction, ids map[int64]bool) ([]*Entry, error)
 
 	// ReadOnly returns true if this instance is read-only.
 	ReadOnly() bool
@@ -162,13 +162,13 @@ func (f *immutableFS) Write(name string, contents []byte) (int64, error) {
 }
 
 func (f *immutableFS) List(
-	t db.Transaction, ids map[int64]bool) ([]Entry, error) {
-	var result []Entry
-	var entry Entry
+	t db.Transaction, ids map[int64]bool) ([]*Entry, error) {
+	var result []*Entry
 	for id, ok := range ids {
 		if !ok {
 			continue
 		}
+		var entry Entry
 		err := f.EntryById(t, id, f.Owner.Id, &entry)
 		if err == ErrNoSuchId {
 			continue
@@ -176,7 +176,7 @@ func (f *immutableFS) List(
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, entry)
+		result = append(result, &entry)
 	}
 	sort.Slice(
 		result, func(i, j int) bool { return result[i].Id < result[j].Id })
